@@ -675,7 +675,6 @@ function pause(on) {
   if (on && state === 'play') { state = 'paused'; showOv('pause'); drawArt('pauseArt'); }
   else if (!on && state === 'paused') { state = 'play'; showOv(null); }
 }
-let shareFile = null;
 function gameOver() {
   state = 'over'; overT = 0;
   const s = score(); newRecord = s > best;
@@ -684,40 +683,24 @@ function gameOver() {
   $('newRec').style.display = newRecord ? 'block' : 'none';
   drawArt('overArt');
   showOv('over');
-  prepareShare();
 }
 
-// ---------- 공유: 점수 이미지 ----------
-function shareData() { return { s: score(), f: fishCount, b: best, n: newRecord ? 1 : 0 }; }
-function shareLink() {
-  const base = siteBase(); if (!base) return '';
-  const d = shareData(); return `${base}share.html?s=${d.s}&f=${d.f}&b=${d.b}&n=${d.n}`;
-}
-function prepareShare() {   // 공유 버튼을 누르는 즉시 공유창이 뜨도록 미리 만들어 둠
-  shareFile = null;
-  try {
-    const c = document.createElement('canvas'); c.width = c.height = 1080;
-    drawShareCard(c.getContext('2d'), 1080, 1080, Object.assign(shareData(), { dead: false }), siteBase());
-    c.toBlob(b => { if (b) shareFile = new File([b], `penguin-loop-${score()}.png`, { type: 'image/png' }); }, 'image/png');
-  } catch (e) {}
-}
+// ---------- 공유: 점수 + 게임 링크를 복사 (PC 버전과 같은 방식) ----------
+const GAME_URL = 'https://pty154055-max.github.io/penguin-loop/';
 function msg(t) { const m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(() => m.style.display = 'none', 2600); }
+function copyOld(text) {   // 예전 브라우저용 복사
+  const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'; document.body.appendChild(ta);
+  ta.select(); ta.setSelectionRange(0, text.length);
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  ta.remove(); return ok;
+}
 async function shareScore() {
-  const link = shareLink(), d = shareData();
-  const text = `펭귄 루프에서 ${d.s.toLocaleString()}점! 물고기 ${d.f}마리 🐧` + (link ? `\n나도 도전하기 👉 ${link}` : '');
-  try {
-    if (shareFile && navigator.canShare && navigator.canShare({ files: [shareFile] })) {
-      await navigator.share({ files: [shareFile], title: '펭귄 루프', text });
-      return;
-    }
-    if (navigator.share) { await navigator.share({ title: '펭귄 루프', text, url: link || undefined }); return; }
-  } catch (e) { if (e && e.name === 'AbortError') return; }
-  // 공유 기능이 없는 브라우저: 이미지 저장
-  if (shareFile) {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(shareFile); a.download = shareFile.name;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    msg('점수 이미지를 저장했어요');
-  } else msg('이 브라우저는 공유를 지원하지 않아요');
+  const text = `펭귄 루프에서 ${score().toLocaleString()}점! 나도 도전하기 👉 ${GAME_URL}`;
+  let ok = false;
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch (e) {}
+  if (!ok) ok = copyOld(text);
+  msg(ok ? '링크를 복사했어요! 카톡 대화창에 붙여넣기' : '복사가 안 됐어요. 주소: ' + GAME_URL);
 }
 
 // ---------- 전체화면 ----------
