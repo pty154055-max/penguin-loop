@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050f22">
+<title>펭귄 루프 · 점수 공유</title>
+<meta name="description" content="펭귄 루프 점수 기록! 화면 가장자리를 달리는 남극 펭귄 게임에 도전해 보세요.">
+<meta property="og:title" content="펭귄 루프 - 내 기록에 도전해 보세요!">
+<meta property="og:description" content="화면 가장자리를 달리는 남극 펭귄 게임. 눌러서 바로 플레이!">
+<meta property="og:image" content="icons/og.png">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  :root { --ui:#eaf6ff; --sub:#9fd8f5; --accent:#ffa53d; --line:#6ebeff; --ink:#0b1430; --panel:#0d2240; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { min-height:100vh; background:#050f22; color:var(--ui); display:grid; place-items:center; padding:16px;
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif; }
+  .wrap { width:min(440px,100%); }
+  .card { background:var(--panel); border:3px solid var(--line); padding:14px;
+    clip-path:polygon(6px 0,calc(100% - 6px) 0,100% 6px,100% calc(100% - 6px),calc(100% - 6px) 100%,6px 100%,0 calc(100% - 6px),0 6px); }
+  img#cardImg { display:block; width:100%; aspect-ratio:1; image-rendering:pixelated; background:#0d2c4d; }
+  .note { font-size:13px; line-height:1.55; color:var(--sub); margin:12px 2px 0; }
+  .note.pc { background:#12305a; border:2px solid #1b4c6e; padding:8px 10px; color:var(--ui); }
+  .btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; margin-top:10px; padding:13px 14px 11px;
+    border:none; border-bottom:4px solid #d9761e; background:var(--accent); color:#2b1600; font-size:17px; font-weight:800; line-height:1; font-family:inherit;
+    cursor:pointer; text-decoration:none;
+    clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px); }
+  .btn:active { transform:translateY(2px); border-bottom-width:2px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:0 8px; }
+  .btn.alt { background:#1b4c6e; color:var(--ui); border-bottom-color:#0b2a44; font-size:15px; }
+  .btn.kakao { background:#fee500; color:#191600; border-bottom-color:#c9b500; font-size:15px; }
+  h3 { font-size:13px; color:var(--sub); font-weight:700; margin:16px 2px 0; letter-spacing:1px; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#0b1a33; border:2px solid var(--line);
+    padding:9px 14px; font-size:14px; display:none; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <img id="cardImg" alt="펭귄 루프 점수 카드">
+    <div class="note pc" id="pcNote" hidden>점수 이미지를 클립보드에 복사했어요.<br>카카오톡 PC 대화창에서 <b>Ctrl+V</b>로 바로 붙여넣을 수 있어요.</div>
+    <div class="note" id="localNote" hidden>지금은 PC에 저장된 파일로 열려 있어서 친구에게 보낼 링크가 없어요.<br>게임을 웹에 올린 뒤 PC 게임의 config.json에 주소를 넣으면 링크 공유가 켜져요.</div>
+    <a class="btn" id="bPlay" href="index.html">▶ 나도 플레이하기</a>
+    <div id="shareBox">
+      <h3>공유하기</h3>
+      <div class="grid">
+        <button class="btn kakao" id="bKakao">카카오톡</button>
+        <button class="btn alt" id="bMore">다른 앱으로</button>
+        <button class="btn alt" id="bX">X (트위터)</button>
+        <button class="btn alt" id="bFb">페이스북</button>
+      </div>
+      <button class="btn alt" id="bCopy">링크 복사</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="art.js"></script>
+<script src="common.js"></script>
+<script>
+'use strict';
+// 카카오톡 공유 버튼을 카카오 공식 방식으로 쓰려면: developers.kakao.com 에서 앱을 만들고
+// 이 사이트 도메인을 등록한 뒤 JavaScript 키를 아래에 넣으세요. (비워두면 공유창/링크 복사로 대신함)
+const KAKAO_JS_KEY = '';
+
+const $ = id => document.getElementById(id);
+const q = new URLSearchParams(location.search || location.hash.slice(1));
+const d = { s: +q.get('s') || 0, f: +q.get('f') || 0, b: +q.get('b') || 0, n: q.get('n') === '1' };
+const fromPC = q.get('pc') === '1';
+const base = siteBase();
+q.delete('pc');
+const link = base ? `${base}share.html?${q.toString()}` : '';
+const game = base ? `${base}index.html` : 'index.html';
+const text = `펭귄 루프에서 ${d.s.toLocaleString()}점! 물고기 ${d.f}마리 🐧 나도 도전해 볼래?`;
+
+// 점수 카드
+const c = document.createElement('canvas'); c.width = c.height = 1080;
+drawShareCard(c.getContext('2d'), 1080, 1080, Object.assign({}, d, { label: fromPC || !base ? '나의 기록' : '친구의 기록' }), base);
+$('cardImg').src = c.toDataURL('image/png');
+document.title = `펭귄 루프 · ${d.s.toLocaleString()}점`;
+$('pcNote').hidden = !fromPC;
+$('localNote').hidden = !!base;
+$('bPlay').href = game;
+
+function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => el.style.display = 'none', 2600); }
+async function copyLink() {
+  if (!link) { toast('웹에 올린 뒤에 링크를 복사할 수 있어요'); return false; }
+  try { await navigator.clipboard.writeText(`${text}\n${link}`); toast('링크를 복사했어요. 대화창에 붙여넣으세요!'); return true; }
+  catch (e) { prompt('아래 내용을 복사하세요', `${text}\n${link}`); return true; }
+}
+async function nativeShare() {
+  if (navigator.share && link) { try { await navigator.share({ title: '펭귄 루프', text, url: link }); return true; } catch (e) { return e.name === 'AbortError'; } }
+  return false;
+}
+let kakaoReady = false;
+if (KAKAO_JS_KEY && base) {
+  const s = document.createElement('script');
+  s.src = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js'; s.crossOrigin = 'anonymous';
+  s.onload = () => { try { Kakao.init(KAKAO_JS_KEY); kakaoReady = true; } catch (e) {} };
+  document.head.appendChild(s);
+}
+$('bKakao').onclick = async () => {
+  if (kakaoReady) {
+    Kakao.Share.sendDefault({
+      objectType: 'feed',
+      content: { title: `펭귄 루프 ${d.s.toLocaleString()}점!`, description: `물고기 ${d.f}마리 · 최고 ${d.b.toLocaleString()}점. 나도 도전해 볼래?`,
+        imageUrl: base + 'icons/og.png', link: { mobileWebUrl: link, webUrl: link } },
+      buttons: [{ title: '나도 플레이하기', link: { mobileWebUrl: game, webUrl: game } }],
+    });
+    return;
+  }
+  if (await nativeShare()) return;       // 휴대폰: 공유창에서 카카오톡 선택
+  copyLink();                            // PC: 링크 복사 → 카톡에 붙여넣기
+};
+$('bMore').onclick = async () => { if (!(await nativeShare())) copyLink(); };
+$('bCopy').onclick = copyLink;
+$('bX').onclick = () => link ? open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`, '_blank', 'noopener') : copyLink();
+$('bFb').onclick = () => link ? open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`, '_blank', 'noopener') : copyLink();
+</script>
+</body>
+</html>
