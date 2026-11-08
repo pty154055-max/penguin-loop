@@ -73,11 +73,12 @@ function drawShareCard(ctx, W, H, d, site) {
     ctx.fillStyle = col; ctx.fillText(s, W / 2, y);
   };
   txt('펭귄 루프', 125, 110, '#eaf6ff');
-  if (d.n) txt('★ 신기록! ★', 305, 40, '#ff8fa3');
+  if (d.n) txt('♥ 신기록! ♥', 305, 40, '#ff8fa3');
   txt(d.label || '나의 기록', 360, 44, '#9fd8f5', false);
   txt(`${(+d.s).toLocaleString()}점`, 475, 150, '#ffd66b');
   txt(`물고기 ${d.f}마리 · 최고 ${(+d.b).toLocaleString()}점`, 600, 42, '#eaf6ff', false);
   if (site) txt('나도 도전하기 ▶ ' + site, 675, 30, '#cfe0ee', false);
+  if (+d.s >= 5000) txt('★ 잼잼에게 점수를 인증하면 선물을 드리겠습니다!', 250, 34, '#ffd66b');
 }
 
 function siteBase() {

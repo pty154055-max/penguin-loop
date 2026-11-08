@@ -113,7 +113,7 @@
         </div>
         <div class="gift" id="gift"></div>
         <button class="btn" id="bRetry">↻ 다시 하기</button>
-        <div class="row"><button class="btn alt" id="bShare">공유하기</button><button class="btn alt" id="bHome">타이틀로</button></div>
+        <div class="row"><button class="btn alt" id="bShare">공유하기</button><button class="btn alt" id="bBrag">자랑하기</button><button class="btn alt" id="bHome">타이틀로</button></div>
       </div>
     </div>
     <div class="overlay" id="ovSound">
@@ -141,9 +141,9 @@ const SKILL_LAPS = 2, SKILL_SIDES = SKILL_LAPS * 4, SLOW_TIME = 2;
 const APU = 67 / 16;                       // 픽셀아트 한 칸 = 4.19 유닛
 const FISH_PTS = 50;                       // 물고기 1마리 점수
 const ICE_BOOST = 1.25;
-const LV_PILES = 1000, LV_SEAL = 2000, LV_FISH = 3000, LV_MORE = 4000, LV_ICE = 4500, LV_GIFT = 5000;
-const MILESTONES = [[LV_PILES, '1000점! 얼음 더미가 커져요'], [LV_SEAL, '2000점! 물범이 가끔 깨요'], [LV_FISH, '3000점! 물고기가 헤엄쳐요'],
-  [LV_MORE, '4000점! 장애물이 많아져요'], [LV_ICE, '4500점! 바닥이 미끄러워요'], [LV_GIFT, '5000점! 잼잼에게 인증하면 선물!']];
+const LV_PILES = 1000, LV_SEAL = 2000, LV_FISH = 3000, LV_MORE = 3000, LV_ICE = 4500, LV_GIFT = 5000;   // 3000점: 물고기 헤엄 + 장애물 1.5배
+const MILESTONES = [[LV_PILES, '1000점! 얼음 더미가 커져요'], [LV_SEAL, '2000점! 물범이 가끔 깨요'], [LV_FISH, '3000점! 물고기가 헤엄치고 장애물이 많아져요'],
+  [LV_ICE, '4500점! 바닥이 미끄러워요'], [LV_GIFT, '5000점! 잼잼에게 인증하면 선물!']];
 const GIFT_MSG = '잼잼에게 점수를 인증하면 선물을 드리겠습니다!';
 const GAME_URL = 'https://pty154055-max.github.io/penguin-loop/';
 const DIR = [[1, 0], [0, -1], [-1, 0], [0, 1]];
@@ -820,6 +820,21 @@ async function shareScore() {
   msg(ok ? '링크를 복사했어요! 카톡 대화창에 붙여넣기' : '복사가 안 됐어요. 주소: ' + GAME_URL);
 }
 
+// ---------- 자랑하기: 점수 화면을 PNG 이미지로 저장 ----------
+function bragScore() {
+  const d = { s: score(), f: fishCount, b: best, n: newRecord ? 1 : 0 };
+  const c = document.createElement('canvas'); c.width = c.height = 1080;
+  drawShareCard(c.getContext('2d'), 1080, 1080, d, GAME_URL);
+  c.toBlob(blob => {
+    if (!blob) { msg('이미지를 만들지 못했어요'); return; }
+    const a = document.createElement('a'), url = URL.createObjectURL(blob);
+    a.href = url; a.download = `penguin-loop-${d.s}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    msg('점수 이미지를 저장했어요!');
+  }, 'image/png');
+}
+
 // ---------- 전체화면 ----------
 function isFS() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
 function enterFS() {
@@ -848,7 +863,7 @@ bind('bStart', () => {
   });
 });
 bind('bResume', () => pause(false)); bind('bQuit', toTitle); bind('bRetry', start); bind('bHome', toTitle);
-bind('bShare', shareScore);
+bind('bShare', shareScore); bind('bBrag', bragScore);
 bind('bPause', () => state === 'paused' ? pause(false) : pause(true));
 bind('bSound', openSound); bind('bSound2', openSound);
 bind('bSoundClose', () => $('ovSound').classList.remove('show'));

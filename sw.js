@@ -1,5 +1,5 @@
 // 펭귄 루프 모바일 - 오프라인 실행용 캐시 (파일을 고치면 VERSION 숫자를 올리세요)
-const VERSION = 'penguin-loop-v5';
+const VERSION = 'penguin-loop-v6';
 const FILES = ['./', 'index.html', 'share.html', 'art.js', 'common.js', 'music.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png', 'icons/og.png'];
 
