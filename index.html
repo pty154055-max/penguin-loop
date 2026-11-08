@@ -90,7 +90,7 @@
         <div>
           <div class="sub">화면 가장자리를 따라 남극 펭귄이 달려요!<br>휴대폰을 가로로 들고 플레이하세요.</div>
           <button class="btn" id="bStart">▶ 시작하기</button>
-          <div class="keys"><b>화면 탭</b> 점프 · <b>꾹</b> 누를수록 높이!<br>공중에서 한 번 더 탭하면 이단 점프<br><b>가운데 달 탭</b> 슬로우 필살기 (2초)</div>
+          <div class="keys"><b>화면 탭</b> 점프 · <b>꾹</b> 눌렀다 떼면 더 높이!<br>공중에서 한 번 더 탭하면 이단 점프<br><b>가운데 달 탭</b> 슬로우 필살기 (2초)</div>
           <div class="mode" id="modeTxt"></div>
         </div>
       </div>
@@ -140,8 +140,7 @@ const JV = 980 * SC, HS = JV * JV / (2 * G);
 const SKILL_LAPS = 2, SKILL_SIDES = SKILL_LAPS * 4, SLOW_TIME = 2;
 const APU = 67 / 16;                       // 픽셀아트 한 칸 = 4.19 유닛
 const FISH_PTS = 50;                       // 물고기 1마리 점수
-const HOLD_MIN = .1, HOLD_MAX = .5;        // 1차 점프: 톡 = 10%, 0.5초 꾹 = 100%
-const AIR_FULL = .95, AIR_HOP = .5;        // 장애물 간격 기준 체공 시간
+const HOLD_MIN = .1, HOLD_MAX = .2;        // 1차 점프: 누르는 동안 모으고 떼는 순간 점프. 톡 = 10%, 0.2초 이상 = 100%
 const ICE_BOOST = 1.25;
 const LV_PILES = 1000, LV_SEAL = 2000, LV_FISH = 3000, LV_MORE = 4000, LV_ICE = 4500, LV_GIFT = 5000;
 const MILESTONES = [[LV_PILES, '1000점! 얼음 더미가 커져요'], [LV_SEAL, '2000점! 물범이 가끔 깨요'], [LV_FISH, '3000점! 물고기가 헤엄쳐요'],
@@ -272,7 +271,7 @@ const flakes = Array.from({ length: 40 }, () => ({ x: Math.random(), y: Math.ran
 let state = 'title', time = 0, overT = 0;
 let P, sides, ice, fishes, parts, sparks, pops, sidesCleared, dist, fishCount, shake, deathT, jumpBuf, coyote, milestone;
 let skill = 1, skillProg = 0, slowT = 0, toastT = 0, toastMsg = '';
-let best = 0, newRecord = false, keyHeld = false;
+let best = 0, newRecord = false, keyHeld = false, pending = false;
 try { best = +localStorage.getItem('penguinLoopBest2') || 0; } catch (e) {}
 
 const speed = () => Math.min(840, 360 + sidesCleared * 13) * SC * preset.speed;
@@ -299,13 +298,16 @@ function makeOb(t, c, r, born) {
 }
 const isLow = o => (o.t === 'spike' || o.t === 'block') && o.h <= 75 && o.w <= 70;
 const isBig = o => o.h > HS * .75 || o.w > 140;
-const airNeed = o => isLow(o) ? AIR_HOP : isBig(o) ? AIR_FULL + .35 : AIR_FULL * .85;
+// 넘는 데 필요한 [체공 시간, 힘 모으는 시간] (초)
+const needOf = o => isLow(o) ? [.42, HOLD_MAX * .3] : isBig(o) ? [1.0, HOLD_MAX] : [.62, HOLD_MAX * .75];
 function gapBetween(prev, nxt, sp, d, lv) {
   const r = Math.random();
   let extra = r < .45 ? rand(0, .2) : r < .8 ? rand(.2, .9) : rand(.9, 2.4);
-  const need = sp * (airNeed(prev) + airNeed(nxt)) / 2 + (lv >= LV_MORE ? 30 : 40);
+  // 앞 장애물 착지 + 다음 점프 힘 모으기 + 다음 장애물 도움닫기 → 항상 넘을 수 있는 최소 간격
+  const [a0] = needOf(prev), [a1, c1] = needOf(nxt);
+  const need = sp * (a0 / 2 + c1 + a1 / 2) + 40;
   let base;
-  if (lv >= LV_MORE) { base = need; extra *= .15; } else base = Math.max(need, sp * AIR_FULL + 30);
+  if (lv >= LV_MORE) { base = need; extra *= .15; } else base = need + sp * .1;
   return base + sp * extra * (1 - .35 * d) + nxt.roam;
 }
 function genSide(k, start, born) {
@@ -317,7 +319,7 @@ function genSide(k, start, born) {
     const o = makeOb(t, c, r, born);
     if (t === 'seal' && lv >= LV_SEAL) o.roam = 90;
     if (prev) x = prev.x + prev.w / 2 + gapBetween(prev, o, sp, d, lv);
-    else x += sp * Math.max(0, airNeed(o) - AIR_HOP) * .8;
+    else { const [a1, c1] = needOf(o); x = Math.max(x, PHW + sp * (c1 + a1 / 2) + 40); }   // 모서리 바로 뒤 여유
     if (x + o.w > n - 170) break;
     o.x = o.x0 = x + o.w / 2;
     obs.push(o);
@@ -332,7 +334,8 @@ function genSide(k, start, born) {
   fishes = fishes.filter(f => f.k !== k).concat(fs.filter(f => f.x < n - 130));
 }
 function reset() {
-  P = { side: 0, x: 150, h: 0, vy: 0, ground: true, jumps: 1, runT: 0, spin: 0, dead: false, charging: false, held: false, holdT: 0, slide: false };
+  P = { side: 0, x: 150, h: 0, vy: 0, ground: true, jumps: 1, runT: 0, spin: 0, dead: false, charging: false, chargeT: 0, slide: false };
+  pending = false;
   sides = [[], [], [], []]; ice = [[], [], [], []]; fishes = []; parts = []; sparks = []; pops = [];
   sidesCleared = 0; dist = 0; fishCount = 0; shake = 0; deathT = 0; jumpBuf = 0; coyote = 0; milestone = 0;
   skill = 1; skillProg = 0; slowT = 0; toastT = 0;
@@ -436,19 +439,22 @@ function puff(k, x, h, n, color, spread = 1) {
 }
 
 // ---------- 조작 ----------
-function startJump() {   // 1차 점프: 누르는 순간 뛰고, 누르고 있는 동안(최대 0.5초) 더 높이
-  P.vy = Math.sqrt(2 * G * HS * HOLD_MIN); P.ground = false; coyote = 0;
-  P.charging = true; P.held = keyHeld; P.holdT = 0; P.jumps = 1;
+function launch(t) {     // 모은 시간 t(초)만큼의 높이로 1차 점프
+  const hgt = HS * (HOLD_MIN + (1 - HOLD_MIN) * Math.min(t, HOLD_MAX) / HOLD_MAX);
+  P.vy = Math.sqrt(2 * G * hgt); P.ground = false; coyote = 0; P.charging = false; P.jumps = 1;
   puff(P.side % 4, P.x, 0, 6, '#ffffff'); beep(420, 760, .12, 'square', .05);
 }
-function tryJump() {
+function pressJump() {   // 누르는 순간: 땅이면 힘 모으기, 공중이면 이단 점프
+  keyHeld = true;
   if (state !== 'play' && state !== 'title') return;
-  if (P.ground || coyote > 0) startJump();
+  if (P.ground || coyote > 0) { P.charging = true; P.chargeT = 0; }
   else if (P.jumps > 0) { P.vy = JV2; P.jumps = 0; P.charging = false; puff(P.side % 4, P.x, P.h, 6, '#ffffff'); beep(620, 1040, .1, 'square', .05); }
-  else jumpBuf = .12;
+  else pending = true;   // 착지하자마자 이어서 힘 모으기
 }
-function pressJump() { keyHeld = true; tryJump(); }
-function releaseJump() { keyHeld = false; if (P) P.held = false; }
+function releaseJump() { // 떼는 순간: 모은 만큼 점프
+  keyHeld = false; pending = false;
+  if (P && P.charging) { P.charging = false; if ((P.ground || coyote > 0) && (state === 'play' || state === 'title')) launch(P.chargeT); }
+}
 function toast(m) { toastMsg = m; toastT = 1.6; }
 function useSkill() {
   if (state !== 'play' || skill < 1 || slowT > 0) return;
@@ -500,37 +506,32 @@ function update(dt) {
   const v = sp * (P.slide ? ICE_BOOST : 1);
   P.x += v * dt; P.runT += dt;
   if (!demo) { dist += v * dt; checkMilestones(); }
-  if (jumpBuf > 0) jumpBuf -= dt;
   if (coyote > 0) coyote -= dt;
+  if (P.charging) { P.chargeT = Math.min(HOLD_MAX, P.chargeT + dt); if (!P.ground && coyote <= 0) P.charging = false; }
   if (lv >= LV_SEAL) moveSeals(dt, k);
   if (lv >= LV_FISH) for (const f of fishes) f.x = f.x0 + Math.sin(time * .9 + f.ph) * 70;
   if (P.slide && Math.random() < dt * 14) puff(k, P.x - 10, 0, 1, '#eaf6ff', .4);
   if (demo && P.ground) {
     const nx = sides[k].find(o => o.x + o.w / 2 > P.x);
-    if (nx && nx.x - nx.w / 2 - P.x < sp * .2) { keyHeld = true; tryJump(); keyHeld = false; P.held = true; }
+    if (nx && nx.x - nx.w / 2 - P.x < sp * .2) launch(HOLD_MAX);
   }
   const hole = !demo && overHole(k, P.x);
   if (P.ground) {
     if (hole) { P.ground = false; P.vy = 0; coyote = .07; }
   } else {
     const prev = P.h;
-    if (P.charging && P.held && P.holdT < HOLD_MAX) {
-      P.holdT = Math.min(HOLD_MAX, P.holdT + dt);
-      const target = HS * (HOLD_MIN + (1 - HOLD_MIN) * P.holdT / HOLD_MAX);
-      P.vy = Math.sqrt(2 * G * Math.max(0, target - P.h));
-      if (P.holdT >= HOLD_MAX) P.charging = false;
-    } else { P.charging = false; P.vy -= G * dt; }
-    P.h += P.vy * dt;
+    P.vy -= G * dt; P.h += P.vy * dt;
     if (P.h <= 0) {
       if (!hole && prev >= 0) {
-        P.h = 0; P.vy = 0; P.ground = true; P.charging = false; puff(k, P.x, 0, 5, '#eaf6ff', .6);
-        if (jumpBuf > 0) { jumpBuf = 0; tryJump(); }
+        P.h = 0; P.vy = 0; P.ground = true; puff(k, P.x, 0, 5, '#eaf6ff', .6);
+        if (pending && keyHeld) { P.charging = true; P.chargeT = 0; }   // 공중에서 미리 누르고 있었으면 바로 힘 모으기
+        pending = false;
       } else if (!hole) { die(); return; }
       else if (P.h < -(GT / U) - 25) { die(); return; }
     }
   }
   if (P.x >= LEN[k] - PHW) {
-    P.side++; P.x = Math.max(0, P.h) + PHW + 2; P.h = 0; P.vy = 0; P.ground = true; P.jumps = 1; P.charging = false;
+    P.side++; P.x = Math.max(0, P.h) + PHW + 2; P.h = 0; P.vy = 0; P.ground = true; P.jumps = 1;
     if (!demo) {
       sidesCleared++;
       if (skill < 1 && ++skillProg >= SKILL_SIDES) { skill = 1; skillProg = 0; toast('필살기 충전!'); beep(520, 1300, .3, 'triangle', .12); vibrate(40); }
