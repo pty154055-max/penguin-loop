@@ -90,7 +90,7 @@
         <div>
           <div class="sub">화면 가장자리를 따라 남극 펭귄이 달려요!<br>휴대폰을 가로로 들고 플레이하세요.</div>
           <button class="btn" id="bStart">▶ 시작하기</button>
-          <div class="keys"><b>화면 탭</b> 점프 · <b>꾹</b> 눌렀다 떼면 더 높이!<br>공중에서 한 번 더 탭하면 이단 점프<br><b>가운데 달 탭</b> 슬로우 필살기 (2초)</div>
+          <div class="keys"><b>화면 탭</b> 점프 · 공중에서 한 번 더!<br><b>가운데 달 탭</b> 슬로우 필살기 (2초)</div>
           <div class="mode" id="modeTxt"></div>
         </div>
       </div>
@@ -140,7 +140,6 @@ const JV = 980 * SC, HS = JV * JV / (2 * G);
 const SKILL_LAPS = 2, SKILL_SIDES = SKILL_LAPS * 4, SLOW_TIME = 2;
 const APU = 67 / 16;                       // 픽셀아트 한 칸 = 4.19 유닛
 const FISH_PTS = 50;                       // 물고기 1마리 점수
-const HOLD_MIN = .1, HOLD_MAX = .2;        // 1차 점프: 누르는 동안 모으고 떼는 순간 점프. 톡 = 10%, 0.2초 이상 = 100%
 const ICE_BOOST = 1.25;
 const LV_PILES = 1000, LV_SEAL = 2000, LV_FISH = 3000, LV_MORE = 4000, LV_ICE = 4500, LV_GIFT = 5000;
 const MILESTONES = [[LV_PILES, '1000점! 얼음 더미가 커져요'], [LV_SEAL, '2000점! 물범이 가끔 깨요'], [LV_FISH, '3000점! 물고기가 헤엄쳐요'],
@@ -271,7 +270,7 @@ const flakes = Array.from({ length: 40 }, () => ({ x: Math.random(), y: Math.ran
 let state = 'title', time = 0, overT = 0;
 let P, sides, ice, fishes, parts, sparks, pops, sidesCleared, dist, fishCount, shake, deathT, jumpBuf, coyote, milestone;
 let skill = 1, skillProg = 0, slowT = 0, toastT = 0, toastMsg = '';
-let best = 0, newRecord = false, keyHeld = false, pending = false;
+let best = 0, newRecord = false;
 try { best = +localStorage.getItem('penguinLoopBest2') || 0; } catch (e) {}
 
 const speed = () => Math.min(840, 360 + sidesCleared * 13) * SC * preset.speed;
@@ -284,7 +283,7 @@ function pickShape(d, lv) {
   let opts = [[['spike', 1, 1], 3], [['block', 1, 1], 3], [['block', 1, 2], .6 + 2 * d], [['seal', 1, 1], .8 + 1.6 * d],
     [['hole', 1, 1], d > .04 ? 1 + 2 * d : 0], [['spike', 2, 1], d > .15 ? 1 + 1.5 * d : 0]];
   if (lv >= LV_PILES) opts.push([['spike', 3, 1], 1], [['block', 2, 1], 1.2], [['block', 2, 2], 1], [['block', 3, 2], .7], [['block', 3, 3], .5]);
-  if (lv >= LV_MORE) opts = opts.map(([sh, w]) => [sh, (sh[1] === 1 && sh[2] === 1 && (sh[0] === 'spike' || sh[0] === 'block')) ? w * 3 : w]);
+  if (lv >= LV_MORE) opts = opts.map(([sh, w]) => [sh, (sh[1] === 1 && sh[2] === 1 && (sh[0] === 'spike' || sh[0] === 'block')) ? w * 4 : w]);
   let r = Math.random() * opts.reduce((s, o) => s + o[1], 0);
   for (const [sh, w] of opts) if ((r -= w) <= 0) return sh;
   return ['spike', 1, 1];
@@ -298,8 +297,8 @@ function makeOb(t, c, r, born) {
 }
 const isLow = o => (o.t === 'spike' || o.t === 'block') && o.h <= 75 && o.w <= 70;
 const isBig = o => o.h > HS * .75 || o.w > 140;
-// 넘는 데 필요한 [체공 시간, 힘 모으는 시간] (초)
-const needOf = o => isLow(o) ? [.42, HOLD_MAX * .3] : isBig(o) ? [1.0, HOLD_MAX] : [.62, HOLD_MAX * .75];
+// 넘는 데 필요한 [체공 시간(초), 0] : 즉발 점프 약 0.68초, 큰 더미는 이단 점프까지
+const needOf = o => isBig(o) ? [1.0, 0] : [.7, 0];
 function gapBetween(prev, nxt, sp, d, lv) {
   const r = Math.random();
   let extra = r < .45 ? rand(0, .2) : r < .8 ? rand(.2, .9) : rand(.9, 2.4);
@@ -307,7 +306,7 @@ function gapBetween(prev, nxt, sp, d, lv) {
   const [a0] = needOf(prev), [a1, c1] = needOf(nxt);
   const need = sp * (a0 / 2 + c1 + a1 / 2) + 40;
   let base;
-  if (lv >= LV_MORE) { base = need; extra *= .15; } else base = need + sp * .1;
+  if (lv >= LV_MORE) { base = (isLow(prev) && isLow(nxt)) ? sp * .6 + 30 : need; extra *= .15; } else base = need + sp * .1;
   return base + sp * extra * (1 - .35 * d) + nxt.roam;
 }
 function genSide(k, start, born) {
@@ -334,8 +333,7 @@ function genSide(k, start, born) {
   fishes = fishes.filter(f => f.k !== k).concat(fs.filter(f => f.x < n - 130));
 }
 function reset() {
-  P = { side: 0, x: 150, h: 0, vy: 0, ground: true, jumps: 1, runT: 0, spin: 0, dead: false, charging: false, chargeT: 0, slide: false };
-  pending = false;
+  P = { side: 0, x: 150, h: 0, vy: 0, ground: true, jumps: 1, runT: 0, spin: 0, dead: false, slide: false };
   sides = [[], [], [], []]; ice = [[], [], [], []]; fishes = []; parts = []; sparks = []; pops = [];
   sidesCleared = 0; dist = 0; fishCount = 0; shake = 0; deathT = 0; jumpBuf = 0; coyote = 0; milestone = 0;
   skill = 1; skillProg = 0; slowT = 0; toastT = 0;
@@ -439,21 +437,11 @@ function puff(k, x, h, n, color, spread = 1) {
 }
 
 // ---------- 조작 ----------
-function launch(t) {     // 모은 시간 t(초)만큼의 높이로 1차 점프
-  const hgt = HS * (HOLD_MIN + (1 - HOLD_MIN) * Math.min(t, HOLD_MAX) / HOLD_MAX);
-  P.vy = Math.sqrt(2 * G * hgt); P.ground = false; coyote = 0; P.charging = false; P.jumps = 1;
-  puff(P.side % 4, P.x, 0, 6, '#ffffff'); beep(420, 760, .12, 'square', .05);
-}
-function pressJump() {   // 누르는 순간: 땅이면 힘 모으기, 공중이면 이단 점프
-  keyHeld = true;
+function pressJump() {   // 누르는 즉시 점프, 공중에서 한 번 더 누르면 이단 점프
   if (state !== 'play' && state !== 'title') return;
-  if (P.ground || coyote > 0) { P.charging = true; P.chargeT = 0; }
-  else if (P.jumps > 0) { P.vy = JV2; P.jumps = 0; P.charging = false; puff(P.side % 4, P.x, P.h, 6, '#ffffff'); beep(620, 1040, .1, 'square', .05); }
-  else pending = true;   // 착지하자마자 이어서 힘 모으기
-}
-function releaseJump() { // 떼는 순간: 모은 만큼 점프
-  keyHeld = false; pending = false;
-  if (P && P.charging) { P.charging = false; if ((P.ground || coyote > 0) && (state === 'play' || state === 'title')) launch(P.chargeT); }
+  if (P.ground || coyote > 0) { P.vy = JV; P.ground = false; coyote = 0; P.jumps = 1; puff(P.side % 4, P.x, 0, 6, '#ffffff'); beep(420, 760, .12, 'square', .05); }
+  else if (P.jumps > 0) { P.vy = JV2; P.jumps = 0; puff(P.side % 4, P.x, P.h, 6, '#ffffff'); beep(620, 1040, .1, 'square', .05); }
+  else jumpBuf = .12;     // 착지 직전에 누르면 착지하자마자 점프
 }
 function toast(m) { toastMsg = m; toastT = 1.6; }
 function useSkill() {
@@ -465,7 +453,7 @@ const overHole = (k, x) => sides[k].some(o => o.t === 'hole' && x > o.x - o.w / 
 const onIce = (k, x) => ice[k].some(([a, b]) => x >= a && x <= b);
 function die() {
   if (P.dead) return;
-  P.dead = true; state = 'dying'; deathT = 0; P.vy = 760; P.ground = false; P.charging = false; shake = .5;
+  P.dead = true; state = 'dying'; deathT = 0; P.vy = 760; P.ground = false; shake = .5;
   puff(P.side % 4, P.x, Math.max(0, P.h), 16, '#bfe8ff', 1.4);
   beep(420, 70, .55, 'sawtooth', .09); vibrate(120);
 }
@@ -507,13 +495,13 @@ function update(dt) {
   P.x += v * dt; P.runT += dt;
   if (!demo) { dist += v * dt; checkMilestones(); }
   if (coyote > 0) coyote -= dt;
-  if (P.charging) { P.chargeT = Math.min(HOLD_MAX, P.chargeT + dt); if (!P.ground && coyote <= 0) P.charging = false; }
+  if (jumpBuf > 0) jumpBuf -= dt;
   if (lv >= LV_SEAL) moveSeals(dt, k);
   if (lv >= LV_FISH) for (const f of fishes) f.x = f.x0 + Math.sin(time * .9 + f.ph) * 70;
   if (P.slide && Math.random() < dt * 14) puff(k, P.x - 10, 0, 1, '#eaf6ff', .4);
   if (demo && P.ground) {
     const nx = sides[k].find(o => o.x + o.w / 2 > P.x);
-    if (nx && nx.x - nx.w / 2 - P.x < sp * .2) launch(HOLD_MAX);
+    if (nx && nx.x - nx.w / 2 - P.x < sp * .33) pressJump();
   }
   const hole = !demo && overHole(k, P.x);
   if (P.ground) {
@@ -524,8 +512,7 @@ function update(dt) {
     if (P.h <= 0) {
       if (!hole && prev >= 0) {
         P.h = 0; P.vy = 0; P.ground = true; puff(k, P.x, 0, 5, '#eaf6ff', .6);
-        if (pending && keyHeld) { P.charging = true; P.chargeT = 0; }   // 공중에서 미리 누르고 있었으면 바로 힘 모으기
-        pending = false;
+        if (jumpBuf > 0) { jumpBuf = 0; pressJump(); }
       } else if (!hole) { die(); return; }
       else if (P.h < -(GT / U) - 25) { die(); return; }
     }
@@ -775,10 +762,10 @@ function drawArt(id) {   // 모달 안 작은 그림
 // ---------- 화면 전환 ----------
 const ov = { title: $('ovTitle'), pause: $('ovPause'), over: $('ovOver') };
 function showOv(name) { for (const k in ov) ov[k].classList.toggle('show', k === name); }
-function start() { ensureAudio(); reset(); state = 'play'; newRecord = false; keyHeld = false; showOv(null); }
+function start() { ensureAudio(); reset(); state = 'play'; newRecord = false; showOv(null); }
 function toTitle() { reset(); state = 'title'; showOv('title'); }
 function pause(on) {
-  if (on && state === 'play') { state = 'paused'; showOv('pause'); drawArt('pauseArt'); releaseJump(); }
+  if (on && state === 'play') { state = 'paused'; showOv('pause'); drawArt('pauseArt'); }
   else if (!on && state === 'paused') { state = 'play'; showOv(null); }
 }
 function gameOver() {
@@ -867,28 +854,23 @@ bind('bSound', openSound); bind('bSound2', openSound);
 bind('bSoundClose', () => $('ovSound').classList.remove('show'));
 bind('bFS', toggleFS);
 
-// ---------- 입력: 누르는 동안 더 높이 ----------
+// ---------- 입력 ----------
 function toStage(cx, cy) {   // 화면 좌표 → 게임 판 좌표 (판이 돌아가 있어도 정확하게)
   const vx = cx - (innerWidth || W) / 2, vy = cy - (innerHeight || H) / 2, a = -stageRot * Math.PI / 180;
   return [(vx * Math.cos(a) - vy * Math.sin(a)) / stageScale + W / 2, (vx * Math.sin(a) + vy * Math.cos(a)) / stageScale + H / 2];
 }
-const downs = new Set();
 cv.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (state !== 'play') return;
   const [x, y] = toStage(e.clientX, e.clientY), R = 8 * moonPx() * 1.5;
-  if ((x - W / 2) ** 2 + (y - H / 2) ** 2 <= R * R) { useSkill(); return; }
-  downs.add(e.pointerId); pressJump();
+  if ((x - W / 2) ** 2 + (y - H / 2) ** 2 <= R * R) useSkill(); else pressJump();
 });
-const up = e => { if (downs.delete(e.pointerId) && downs.size === 0) releaseJump(); };
-cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.addEventListener('pointerleave', up);
 addEventListener('keydown', e => {   // PC 브라우저에서 열었을 때
   if (e.repeat) return;
   if (e.code === 'Space') { e.preventDefault(); if (state === 'play') useSkill(); else if (state === 'title') $('bStart').click(); else if (state === 'over' && overT > .35) start(); else if (state === 'paused') pause(false); }
   else if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); if (state === 'play') pressJump(); }
   else if (e.code === 'KeyP') state === 'paused' ? pause(false) : pause(true);
 });
-addEventListener('keyup', e => { if (e.code === 'ArrowUp' || e.code === 'KeyW') releaseJump(); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { pause(true); if (actx) actx.suspend(); }
   else if (actx) actx.resume();
